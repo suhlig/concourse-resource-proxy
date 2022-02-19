@@ -1,7 +1,3 @@
-// Copyright 2015 The Gorilla WebSocket Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package main
 
 import (
@@ -110,24 +106,31 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 	defer ws.Close()
 
 	outr, outw, err := os.Pipe()
+
 	if err != nil {
 		internalError(ws, "stdout:", err)
 		return
 	}
+
 	defer outr.Close()
 	defer outw.Close()
 
 	inr, inw, err := os.Pipe()
+
 	if err != nil {
 		internalError(ws, "stdin:", err)
 		return
 	}
+
 	defer inr.Close()
 	defer inw.Close()
+
+	// TODO stderr
 
 	proc, err := os.StartProcess(cmdPath, flag.Args(), &os.ProcAttr{
 		Files: []*os.File{inr, outw, outw},
 	})
+
 	if err != nil {
 		internalError(ws, "start:", err)
 		return

@@ -1,9 +1,5 @@
 package main
 
-// Copyright 2015 The Gorilla WebSocket Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 import (
 	"flag"
 	"log"
@@ -16,6 +12,14 @@ import (
 )
 
 var addr = flag.String("addr", "localhost:8080", "http service address")
+var stdin = []byte(`{
+	"source": {
+		"interval": "30m"
+	},
+	"version": {
+		"time": "2022-02-19T18:35:00Z"
+	}
+}`)
 
 func main() {
 	flag.Parse()
@@ -25,12 +29,14 @@ func main() {
 	signal.Notify(interrupt, os.Interrupt)
 
 	u := url.URL{Scheme: "ws", Host: *addr, Path: "/check"}
-	log.Printf("connecting to %s", u.String())
+	log.Printf("proxying to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
+
 	defer c.Close()
 
 	done := make(chan struct{})
@@ -39,27 +45,27 @@ func main() {
 		defer close(done)
 		for {
 			_, message, err := c.ReadMessage()
+
 			if err != nil {
-				log.Println("read:", err)
+				log.Println(err)
 				return
 			}
+
 			log.Printf("recv: %s", message)
 		}
 	}()
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	err = c.WriteMessage(websocket.TextMessage, stdin)
+
+	if err != nil {
+		log.Println("write:", err)
+		return
+	}
 
 	for {
 		select {
 		case <-done:
 			return
-		case t := <-ticker.C:
-			err := c.WriteMessage(websocket.TextMessage, []byte(t.String()))
-			if err != nil {
-				log.Println("write:", err)
-				return
-			}
 		case <-interrupt:
 			log.Println("interrupt")
 
