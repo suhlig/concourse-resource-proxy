@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"log"
 	"net/url"
@@ -12,14 +13,6 @@ import (
 )
 
 var addr = flag.String("addr", "localhost:8080", "http service address")
-var stdin = []byte(`{
-	"source": {
-		"interval": "30m"
-	},
-	"version": {
-		"time": "2022-02-19T18:35:00Z"
-	}
-}`)
 
 func main() {
 	flag.Parse()
@@ -51,14 +44,25 @@ func main() {
 				return
 			}
 
-			log.Printf("recv: %s", message)
+			log.Printf("< %s", message)
 		}
 	}()
 
-	err = c.WriteMessage(websocket.TextMessage, stdin)
+	scanner := bufio.NewScanner(os.Stdin)
 
-	if err != nil {
-		log.Println("write:", err)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		log.Printf("> %s\n", line)
+		err = c.WriteMessage(websocket.TextMessage, line)
+
+		if err != nil {
+			log.Println("write error:", err)
+			return
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Println(err)
 		return
 	}
 
@@ -79,6 +83,7 @@ func main() {
 			select {
 			case <-done:
 			case <-time.After(time.Second):
+				log.Println("timeout")
 			}
 			return
 		}
