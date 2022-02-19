@@ -1,8 +1,7 @@
 package main
 
 import (
-	"bufio"
-	"flag"
+	"encoding/json"
 	"log"
 	"net/url"
 	"os"
@@ -12,17 +11,43 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "localhost:8080", "http service address")
+type Input struct {
+	Source struct {
+		URL     string
+		Token   string
+		Proxied json.RawMessage `json:"proxied"`
+	} `json:"source"`
+	Version map[string]string `json:"version"`
+}
+
+type Output struct {
+	Source  json.RawMessage   `json:"source"`
+	Version map[string]string `json:"version"`
+}
 
 func main() {
-	flag.Parse()
 	log.SetFlags(0)
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	// TODO parse wss://example.com and append /check
-	u := url.URL{Scheme: "wss", Host: *addr, Path: "/check"}
+	var input Input
+
+	err := json.NewDecoder(os.Stdin).Decode(&input)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	u, err := url.Parse(input.Source.URL)
+
+	if err != nil {
+		log.Fatal("parse:", err)
+	}
+
+	// TODO Check for trailing slash in u.Path
+	u.Path = u.Path + "/check"
+
+	// TODO If scheme is not ws or wss, bail out
 	log.Printf("proxying to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -49,24 +74,20 @@ func main() {
 		}
 	}()
 
-	// TODO Fully read stdin and read source.url and source.token from it.
+	output, err := json.Marshal(Output{
+		Source:  input.Source.Proxied,
+		Version: input.Version,
+	})
 
-	scanner := bufio.NewScanner(os.Stdin)
-
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		log.Printf("> %s\n", line)
-		err = c.WriteMessage(websocket.TextMessage, line)
-
-		if err != nil {
-			log.Println("write error:", err)
-			return
-		}
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Println(err)
-		return
+	log.Printf("> %s\n", output)
+	err = c.WriteMessage(websocket.TextMessage, output)
+
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	for {

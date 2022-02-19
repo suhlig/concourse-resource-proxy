@@ -42,6 +42,8 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
       source:
         url: wss://example.com
         token: ((proxy-api-token))
+        proxied:
+          interval: "30m" # this is passed to the resource under development as source
       type: resource-proxy
 
     jobs:
@@ -82,14 +84,16 @@ As the `resource proxy` is a regular Concourse resource type, it needs to be con
 ```yaml
 - name: every-hour-proxied
   source:
-    url: https://example.com
+    url: wss://example.com
     token: ((proxy-api-token))
+    proxied:
+      interval: "30m" # this is passed to the resource under development as source
   type: resource-proxy
 ```
 
-The `token` is used to protect the `proxy server`.
-
-TODO Provide configuration to be passed to the resource under development
+- `source.url` specifies where the proxy server listens. The scheme _must_ be `ws` or `wss`. The proxy will append `/check`, `/in` or `/out` for the corresponding requests.
+- `source.proxied` is passed to the resource under development
+- `token` is used to protect the `proxy server`
 
 # Behavior
 
@@ -120,6 +124,23 @@ Invokes `in` of the resource under development and passes the incoming stream of
 ## `/out`
 
 TODO
+
+# Development
+
+```command
+$ echo '{
+  "source": {
+    "url": "wss://example.com",
+    "token": "s3cret",
+    "proxied": {
+      "interval": "30m"
+    }
+  },
+  "version": {
+    "time":"2022-02-19T21:07:00Z"
+  }
+}' | go run ./proxy/cmd/check/main.go
+```
 
 # License
 
