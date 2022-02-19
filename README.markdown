@@ -12,6 +12,7 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
 
     ```command
     $ concourse-resource-proxy \
+        --addr localhost:8123 \
         --check concourse-time-resource/check/check \
         --in    concourse-time-resource/in/in \
         --out   concourse-time-resource/out/out
@@ -39,7 +40,7 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
     resources:
     - name: every-hour-proxied
       source:
-        url: https://example.com
+        url: wss://example.com
         token: ((proxy-api-token))
       type: resource-proxy
 
@@ -49,6 +50,8 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
       - get: every-hour-proxied
         trigger: true
     ```
+
+    Note that the `source.url` assumes that your local workstation is accessible via this address. You can use [ngrok](https://ngrok.com/) or similar services to forward a local port to a public URL. My personal solution is SSH remote port forwarding (`ssh -R 8123:localhost:8123 example.com`).
 
 1. Run a [manual resource check](https://concourse-ci.org/managing-resource-types.html):
 

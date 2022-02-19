@@ -21,7 +21,8 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/check"}
+	// TODO parse wss://example.com and append /check
+	u := url.URL{Scheme: "wss", Host: *addr, Path: "/check"}
 	log.Printf("proxying to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -47,6 +48,8 @@ func main() {
 			log.Printf("< %s", message)
 		}
 	}()
+
+	// TODO Fully read stdin and read source.url and source.token from it.
 
 	scanner := bufio.NewScanner(os.Stdin)
 
