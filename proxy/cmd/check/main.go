@@ -25,7 +25,7 @@ type Input struct {
 	Version map[string]string `json:"version"`
 }
 
-type Output struct {
+type CheckMessage struct {
 	Source  json.RawMessage   `json:"source"`
 	Version map[string]string `json:"version"`
 }
@@ -86,7 +86,7 @@ func main() {
 		}
 	}()
 
-	output, err := json.Marshal(Output{
+	output, err := json.Marshal(CheckMessage{
 		Source:  input.Source.Proxied,
 		Version: input.Version,
 	})
@@ -95,6 +95,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// TODO Send as JSON (we already parsed STDIN)
+	// TODO Pass environment variables
 	log.Printf("> %s\n", output)
 	err = c.WriteMessage(websocket.TextMessage, output)
 

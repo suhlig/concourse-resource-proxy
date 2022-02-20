@@ -6,7 +6,8 @@ I wanted to iterate faster on a new resource, and came up with a proxy that forw
 
 # Caveats
 
-The runtime environment of the resource under development is quite different from Concourse - it runs side-by-side with the server (different OS and root file system; not running in a container).
+* The runtime environment of the resource under development is quite different from Concourse - it runs side-by-side with the server (different OS and root file system; not running in a container).
+* `STDERR` of the resource under development is not streamed back to Concourse yet
 
 # How to use it
 
@@ -69,10 +70,12 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
 
 # Architecture
 
-There are two components:
+![](doc/architecture-check.drawio.svg)
+
+There are two new components:
 
 1. The `resource proxy` stands in for the resource under development, proxying all of Concourse's `{check, in, out}` requests to the
-1. `server`, which
+1. `resource server`, which
    - receives the forwarded requests,
    - invokes the local `{check, in, out}` programs of the resource under development, and
    - returns their responses back to the resource proxy.
@@ -96,7 +99,7 @@ As the `resource proxy` is a regular Concourse resource type, it needs to be con
 ```
 
 - `source.url` specifies where the server listens. The scheme _must_ be `ws` or `wss`. The proxy will append `/check`, `/in` or `/out` for the corresponding requests.
-- `source.proxied` is passed to the resource under development
+- `source.proxied` is passed to the resource under development as `source`
 - `token` is used to protect the `server`
 
 # Behavior
