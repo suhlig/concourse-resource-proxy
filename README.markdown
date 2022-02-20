@@ -64,7 +64,7 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
 1. Run a [manual resource check](https://concourse-ci.org/managing-resource-types.html):
 
     ```command
-    $ fly -t example check-resource-type --resource-type my-pipeline/every-hour-proxied
+    $ fly -t "$CONCOURSE_TARGET" check-resource-type --resource-type resource-proxy-example/every-hour-proxied
     ```
 
   Both the server (from step 1 above) and the `every-hour-proxied` resource will print the data going back and forth.

@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -85,6 +86,7 @@ func main() {
 			}
 
 			log.Printf("< %s", message)
+			fmt.Println(message)
 		}
 	}()
 

@@ -1,0 +1,21 @@
+resource_types:
+- name: resource-proxy
+  type: registry-image
+  source:
+    repository: suhlig/concourse-resource-proxy
+    tag: 1.0.0-pre1
+
+resources:
+- name: every-hour-proxied
+  source:
+    url: wss://proxy.uhlig.it
+#    token: ((proxy-api-token))
+    proxied:
+      interval: "30m" # this is passed to the resource under development as source
+  type: resource-proxy
+
+jobs:
+- name: announce
+  plan:
+  - get: every-hour-proxied
+    trigger: true
