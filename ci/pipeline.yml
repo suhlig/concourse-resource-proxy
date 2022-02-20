@@ -1,0 +1,44 @@
+jobs:
+  # Create a new tag in order to trigger this
+  - name: test-and-ship-tag
+    plan:
+      - in_parallel:
+        - get: tagged-commits
+          trigger: true
+        - get: tasks
+      - task: build-image
+        privileged: true
+        file: tasks/oci/build-image.yml
+        input_mapping: { source: tagged-commits }
+      - load_var: image-version
+        file: tagged-commits/.git/describe_ref # https://github.com/concourse/git-resource#additional-files-populated
+      - put: docker-hub
+        params:
+          image: image/image.tar
+          version: ((.:image-version))
+          bump_aliases: true
+
+resources:
+  - name: tagged-commits
+    type: git
+    icon: github
+    source:
+      uri: git@github.com:suhlig/concourse-resource-proxy.git
+      private_key: ((github.ssh_key))
+      fetch_tags: true
+      tag_filter: v*
+
+  - name: tasks
+    type: git
+    icon: github
+    source:
+      uri: git@github.com:suhlig/concourse-task-store.git
+      private_key: ((github.ssh_key))
+
+  - name: docker-hub
+    type: registry-image
+    icon: docker
+    source:
+      repository: suhlig/concourse-resource-proxy
+      username: suhlig
+      password: ((dockerhub.auth_token))

@@ -133,6 +133,27 @@ Invokes `in` of the resource under development and passes the incoming stream of
 
 TODO
 
+# Release
+
+There is a Concourse pipeline in `ci`. It creates a draft GitHub release for every tag:
+
+```command
+$ git tag -a v1.0.0-pre1 -m "Preparing release v1.0.0 - attempt 1"
+$ git push --follow-tags
+```
+
+# CI
+
+```command
+$ fly \
+    -t "$CONCOURSE_TARGET" \
+  set-pipeline \
+    -p concourse-resource-proxy \
+    -c ci/pipeline.yml \
+    -v git-branch="$GIT_BRANCH" \
+    -l ci/private-config.yml
+```
+
 # Development
 
 Manually invoke the time resource via proxy (does not need Concourse). Assumes that the server is listening on `wss://example.com`.
