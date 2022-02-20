@@ -12,16 +12,16 @@ I wanted to iterate faster on a new resource, and came up with a proxy that forw
 
 # How to use it
 
-Assuming that you want to hack on the [`concourse-time-resource`](https://github.com/concourse/time-resource):
+Assuming that you want to hack on the [`concourse-time-resource`](https://github.com/concourse/time-resource) that is in `~/workspace/concourse-time-resource`:
 
 1. Start the server:
 
     ```command
     $ concourse-resource-proxy \
         --addr localhost:8123 \
-        --check concourse-time-resource/check/check \
-        --in    concourse-time-resource/in/in \
-        --out   concourse-time-resource/out/out
+        --check ~/workspace/concourse-time-resource/check/check \
+        --in    ~/workspace/concourse-time-resource/in/in \
+        --out   ~/workspace/concourse-time-resource/out/out
     ```
 
 1. Now you can build the time resource locally:
@@ -149,7 +149,7 @@ $ echo '{
   "version": {
     "time":"2022-02-19T21:07:00Z"
   }
-}' | go run ./proxy/cmd/check/main.go
+}' | go run check/main.go
 ```
 
 # License

@@ -1,2 +1,3 @@
 .envrc
 .vscode
+ci/private-config.yml
