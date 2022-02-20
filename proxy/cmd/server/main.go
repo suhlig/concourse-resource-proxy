@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	addr    = flag.String("addr", "127.0.0.1:8080", "http service address")
-	cmdPath string
+	addr      = flag.String("addr", "127.0.0.1:8080", "http service address")
+	checkPath string
 )
 
 const (
@@ -52,7 +52,7 @@ func pumpStdin(ws *websocket.Conn, w io.Writer) {
 			break
 		}
 
-		log.Printf("< %s\n", message)
+		log.Printf("I< %s\n", message)
 
 		message = append(message, '\n')
 
@@ -62,7 +62,7 @@ func pumpStdin(ws *websocket.Conn, w io.Writer) {
 	}
 }
 
-func pumpStdout(ws *websocket.Conn, r io.Reader, done chan struct{}) {
+func pumpStdout(r io.Reader, ws *websocket.Conn, done chan struct{}) {
 	defer func() {
 	}()
 	s := bufio.NewScanner(r)
@@ -70,7 +70,7 @@ func pumpStdout(ws *websocket.Conn, r io.Reader, done chan struct{}) {
 		ws.SetWriteDeadline(time.Now().Add(writeWait))
 		message := s.Bytes()
 
-		log.Printf("> %s", message)
+		log.Printf("O> %s", message)
 
 		if err := ws.WriteMessage(websocket.TextMessage, message); err != nil {
 			ws.Close()
@@ -88,6 +88,21 @@ func pumpStdout(ws *websocket.Conn, r io.Reader, done chan struct{}) {
 	ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	time.Sleep(closeGracePeriod)
 	ws.Close()
+}
+
+func pumpStderr(r io.Reader, done chan struct{}) {
+	s := bufio.NewScanner(r)
+	for s.Scan() {
+		message := s.Bytes()
+
+		log.Printf("E> %s", message)
+	}
+
+	if s.Err() != nil {
+		log.Println("scan:", s.Err())
+	}
+
+	close(done)
 }
 
 func ping(ws *websocket.Conn, done chan struct{}) {
@@ -121,30 +136,40 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 
 	defer ws.Close()
 
-	outr, outw, err := os.Pipe()
-
-	if err != nil {
-		internalError(ws, "stdout:", err)
-		return
-	}
-
-	defer outr.Close()
-	defer outw.Close()
-
-	inr, inw, err := os.Pipe()
+	stdinReader, stdinWriter, err := os.Pipe()
 
 	if err != nil {
 		internalError(ws, "stdin:", err)
 		return
 	}
 
-	defer inr.Close()
-	defer inw.Close()
+	defer stdinReader.Close()
+	defer stdinWriter.Close()
 
-	// TODO stderr
+	stdoutReader, stdoutWriter, err := os.Pipe()
 
-	proc, err := os.StartProcess(cmdPath, flag.Args(), &os.ProcAttr{
-		Files: []*os.File{inr, outw, outw},
+	if err != nil {
+		internalError(ws, "stdout:", err)
+		return
+	}
+
+	defer stdoutReader.Close()
+	defer stdoutWriter.Close()
+
+	stderrReader, stderrWriter, err := os.Pipe()
+
+	if err != nil {
+		internalError(ws, "stderr:", err)
+		return
+	}
+
+	defer stderrReader.Close()
+	defer stderrWriter.Close()
+
+	// TODO Pass environment variables to in and out
+
+	proc, err := os.StartProcess(checkPath, flag.Args(), &os.ProcAttr{
+		Files: []*os.File{stdinReader, stdoutWriter, stderrWriter},
 	})
 
 	if err != nil {
@@ -152,17 +177,21 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inr.Close()
-	outw.Close()
+	stdinReader.Close()
+	stdoutWriter.Close()
+	stderrWriter.Close()
 
 	stdoutDone := make(chan struct{})
-	go pumpStdout(ws, outr, stdoutDone)
+	go pumpStdout(stdoutReader, ws, stdoutDone)
+
+	stderrDone := make(chan struct{})
+	go pumpStderr(stderrReader, stderrDone)
+
 	go ping(ws, stdoutDone)
 
-	pumpStdin(ws, inw)
+	pumpStdin(ws, stdinWriter)
 
-	// Some commands will exit when stdin is closed.
-	inw.Close()
+	stdinWriter.Close() // Some commands will exit when stdin is closed.
 
 	// Other commands need a bonk on the head.
 	if err := proc.Signal(os.Interrupt); err != nil {
@@ -171,6 +200,7 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 
 	select {
 	case <-stdoutDone:
+	case <-stderrDone:
 	case <-time.After(time.Second):
 		// A bigger bonk on the head.
 		if err := proc.Signal(os.Kill); err != nil {
@@ -193,12 +223,15 @@ func main() {
 	}
 
 	var err error
-	cmdPath, err = exec.LookPath(flag.Args()[0])
+	checkPath, err = exec.LookPath(flag.Args()[0])
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	http.HandleFunc("/check", serveCheck)
+
+	log.Printf("proxying /check to %s", checkPath)
+
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }

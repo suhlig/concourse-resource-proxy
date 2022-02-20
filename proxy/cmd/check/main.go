@@ -60,7 +60,7 @@ func main() {
 
 	u.Path = u.Path + "check"
 
-	log.Printf("proxying to %s", u.String())
+	log.Printf("proxying check to %s: ", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 
@@ -95,8 +95,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// TODO Send as JSON (we already parsed STDIN)
-	// TODO Pass environment variables
+	// TODO Pass environment variables to in and out
+
 	log.Printf("> %s\n", output)
 	err = c.WriteMessage(websocket.TextMessage, output)
 

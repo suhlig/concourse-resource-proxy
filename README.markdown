@@ -7,7 +7,7 @@ I wanted to iterate faster on a new resource, and came up with a proxy that forw
 # Caveats
 
 * The runtime environment of the resource under development is quite different from Concourse - it runs side-by-side with the server (different OS and root file system; not running in a container).
-* `STDERR` of the resource under development is not streamed back to Concourse yet
+* `STDERR` of the resource under development is not streamed back to Concourse, but printed to the server's `STDERR`
 
 # How to use it
 
