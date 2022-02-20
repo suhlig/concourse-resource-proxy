@@ -62,23 +62,25 @@ func main() {
 
 	log.Printf("proxying check to %s: ", u.String())
 
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	ws, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
 
-	defer c.Close()
+	defer ws.Close()
 
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
 		for {
-			_, message, err := c.ReadMessage()
+			messageType, message, err := ws.ReadMessage()
 
 			if err != nil {
-				log.Println(err)
+				if messageType != -1 { // noFrame
+					log.Printf("Error: %s", err)
+				}
 				return
 			}
 
@@ -98,7 +100,7 @@ func main() {
 	// TODO Pass environment variables to in and out
 
 	log.Printf("> %s\n", output)
-	err = c.WriteMessage(websocket.TextMessage, output)
+	err = ws.WriteMessage(websocket.TextMessage, output)
 
 	if err != nil {
 		log.Fatal(err)
@@ -113,7 +115,7 @@ func main() {
 
 			// Cleanly close the connection by sending a close message and then
 			// waiting (with timeout) for the server to close the connection.
-			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			err := ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			if err != nil {
 				log.Println("write close:", err)
 				return
