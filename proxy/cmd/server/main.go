@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	addr      = flag.String("addr", "127.0.0.1:8080", "http service address")
-	checkPath string
+	addr         = flag.String("addr", "127.0.0.1:8080", "http service address")
+	checkPath    = flag.String("check", "", "path to the check executable under test")
+	checkProgram string
 )
 
 const (
@@ -52,7 +53,7 @@ func pumpStdin(ws *websocket.Conn, w io.Writer) {
 			break
 		}
 
-		log.Printf("I< %s\n", message)
+		log.Printf("< %s\n", message)
 
 		message = append(message, '\n')
 
@@ -70,7 +71,7 @@ func pumpStdout(r io.Reader, ws *websocket.Conn, done chan struct{}) {
 		ws.SetWriteDeadline(time.Now().Add(writeWait))
 		message := s.Bytes()
 
-		log.Printf("O> %s", message)
+		log.Printf("> %s", message)
 
 		if err := ws.WriteMessage(websocket.TextMessage, message); err != nil {
 			ws.Close()
@@ -95,7 +96,7 @@ func pumpStderr(r io.Reader, done chan struct{}) {
 	for s.Scan() {
 		message := s.Bytes()
 
-		log.Printf("E> %s", message)
+		log.Printf("E %s", message)
 	}
 
 	if s.Err() != nil {
@@ -122,7 +123,7 @@ func ping(ws *websocket.Conn, done chan struct{}) {
 
 func internalError(ws *websocket.Conn, msg string, err error) {
 	log.Println(msg, err)
-	ws.WriteMessage(websocket.TextMessage, []byte("Internal server error."))
+	ws.WriteMessage(websocket.TextMessage, []byte(msg))
 }
 
 var upgrader = websocket.Upgrader{}
@@ -167,8 +168,9 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 	defer stderrWriter.Close()
 
 	// TODO Pass environment variables to in and out
+	// TODO Pass a temporary directory to in and out as $1
 
-	proc, err := os.StartProcess(checkPath, flag.Args(), &os.ProcAttr{
+	proc, err := os.StartProcess(checkProgram, []string{}, &os.ProcAttr{
 		Files: []*os.File{stdinReader, stdoutWriter, stderrWriter},
 	})
 
@@ -215,15 +217,11 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	flag.Parse()
 	log.SetFlags(0)
-
-	if len(flag.Args()) < 1 {
-		log.Fatal("must specify at least one argument")
-	}
+	flag.Parse()
 
 	var err error
-	checkPath, err = exec.LookPath(flag.Args()[0])
+	checkProgram, err = exec.LookPath(*checkPath)
 
 	if err != nil {
 		log.Fatal(err)
@@ -231,7 +229,7 @@ func main() {
 
 	http.HandleFunc("/check", serveCheck)
 
-	log.Printf("proxying /check to %s", checkPath)
+	log.Printf("proxying /check to %s", checkProgram)
 
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
