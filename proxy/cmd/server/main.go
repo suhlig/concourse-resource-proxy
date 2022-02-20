@@ -40,7 +40,7 @@ const (
 	closeGracePeriod = 10 * time.Second
 )
 
-func pumpStdin(ws *websocket.Conn, w io.Writer) {
+func pumpStdin(ws *websocket.Conn, stdin io.Writer) {
 	defer ws.Close()
 	ws.SetReadLimit(maxMessageSize)
 	ws.SetReadDeadline(time.Now().Add(pongWait))
@@ -57,16 +57,16 @@ func pumpStdin(ws *websocket.Conn, w io.Writer) {
 
 		message = append(message, '\n')
 
-		if _, err := w.Write(message); err != nil {
+		if _, err := stdin.Write(message); err != nil {
 			break
 		}
 	}
 }
 
-func pumpStdout(r io.Reader, ws *websocket.Conn, done chan struct{}) {
+func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}) {
 	defer func() {
 	}()
-	s := bufio.NewScanner(r)
+	s := bufio.NewScanner(stdout)
 	for s.Scan() {
 		ws.SetWriteDeadline(time.Now().Add(writeWait))
 		message := s.Bytes()
@@ -185,11 +185,10 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 
 	stdoutDone := make(chan struct{})
 	go pumpStdout(stdoutReader, ws, stdoutDone)
+	go ping(ws, stdoutDone)
 
 	stderrDone := make(chan struct{})
 	go pumpStderr(stderrReader, stderrDone)
-
-	go ping(ws, stdoutDone)
 
 	pumpStdin(ws, stdinWriter)
 
@@ -227,9 +226,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	http.HandleFunc("/check", serveCheck)
-
 	log.Printf("proxying /check to %s", checkProgram)
-
+	http.HandleFunc("/check", serveCheck)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
