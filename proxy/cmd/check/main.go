@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -45,10 +46,16 @@ func main() {
 		log.Fatal("parse:", err)
 	}
 
-	// TODO Check for trailing slash in u.Path
-	u.Path = u.Path + "/check"
+	if !(u.Scheme == "ws" || u.Scheme == "wss") {
+		log.Fatal("Error: uri scheme must be ws or wss")
+	}
 
-	// TODO If scheme is not ws or wss, bail out
+	if !strings.HasSuffix(u.Path, "/") {
+		u.Path = u.Path + "/"
+	}
+
+	u.Path = u.Path + "check"
+
 	log.Printf("proxying to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
