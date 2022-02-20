@@ -59,12 +59,24 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
         trigger: true
     ```
 
+    The pipeline above is available as `example.yml` and can be set like this:
+
+    ```command
+    $ fly \
+        --target "$CONCOURSE_TARGET" \
+      set-pipeline \
+        --pipeline resource-proxy-example \
+        --config example.yml
+    ```
     Note that the `source.url` assumes that your local workstation is accessible via this address. You can use [ngrok](https://ngrok.com/) or similar services to forward a local port to a public URL. My personal solution is SSH remote port forwarding (`ssh -R 8123:localhost:8123 example.com`).
 
 1. Run a [manual resource check](https://concourse-ci.org/managing-resource-types.html):
 
     ```command
-    $ fly -t "$CONCOURSE_TARGET" check-resource-type --resource-type resource-proxy-example/every-hour-proxied
+    $ fly \
+        --target "$CONCOURSE_TARGET" \
+      check-resource-type \
+        --resource-type resource-proxy-example/every-hour-proxied
     ```
 
   Both the server (from step 1 above) and the `every-hour-proxied` resource will print the data going back and forth.
@@ -146,12 +158,11 @@ $ git push --follow-tags
 
 ```command
 $ fly \
-    -t "$CONCOURSE_TARGET" \
+    --target "$CONCOURSE_TARGET" \
   set-pipeline \
-    -p concourse-resource-proxy \
-    -c ci/pipeline.yml \
-    -v git-branch="$GIT_BRANCH" \
-    -l ci/private-config.yml
+    --pipeline concourse-resource-proxy \
+    --config ci/pipeline.yml \
+    --load-vars-from ci/private-config.yml
 ```
 
 # Development

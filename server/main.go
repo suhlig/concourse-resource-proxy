@@ -20,7 +20,9 @@ import (
 var (
 	addr         = flag.String("addr", "127.0.0.1:8080", "http service address")
 	checkPath    = flag.String("check", "", "path to the check executable under test")
+	inPath       = flag.String("in", "", "path to the in executable under test")
 	checkProgram string
+	inProgram    string
 )
 
 const (
@@ -74,6 +76,7 @@ func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}) {
 		log.Printf("> %s", message)
 
 		if err := ws.WriteMessage(websocket.TextMessage, message); err != nil {
+			log.Printf("E: %s", err)
 			ws.Close()
 			break
 		}
@@ -215,6 +218,120 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func serveIn(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("upgrade:", err)
+		return
+	}
+
+	defer ws.Close()
+
+	stdinReader, stdinWriter, err := os.Pipe()
+
+	if err != nil {
+		internalError(ws, "stdin:", err)
+		return
+	}
+
+	defer stdinReader.Close()
+	defer stdinWriter.Close()
+
+	stdoutReader, stdoutWriter, err := os.Pipe()
+
+	if err != nil {
+		internalError(ws, "stdout:", err)
+		return
+	}
+
+	defer stdoutReader.Close()
+	defer stdoutWriter.Close()
+
+	stderrReader, stderrWriter, err := os.Pipe()
+
+	if err != nil {
+		internalError(ws, "stderr:", err)
+		return
+	}
+
+	defer stderrReader.Close()
+	defer stderrWriter.Close()
+
+	destination, err := os.MkdirTemp("", "concourse-resource-proxy-server-*")
+
+	if err != nil {
+		internalError(ws, "stderr:", err)
+		return
+	}
+
+	defer os.RemoveAll(destination)
+
+	// TODO Pass environment variables
+	proc, err := os.StartProcess(inProgram, []string{inProgram, destination}, &os.ProcAttr{
+		Files: []*os.File{stdinReader, stdoutWriter, stderrWriter},
+	})
+
+	if err != nil {
+		internalError(ws, "start:", err)
+		return
+	}
+
+	stdinReader.Close()
+	stdoutWriter.Close()
+	stderrWriter.Close()
+
+	stdoutDone := make(chan struct{})
+	go pumpStdout(stdoutReader, ws, stdoutDone)
+	go ping(ws, stdoutDone)
+
+	stderrDone := make(chan struct{})
+	go pumpStderr(stderrReader, stderrDone)
+
+	pumpStdin(ws, stdinWriter)
+
+	stdinWriter.Close() // Some commands will exit when stdin is closed.
+
+	// Other commands need a bonk on the head.
+	if err := proc.Signal(os.Interrupt); err != nil {
+		log.Println("inter:", err)
+	}
+
+	select {
+	case <-stdoutDone:
+	case <-stderrDone:
+	case <-time.After(time.Second):
+		// A bigger bonk on the head.
+		if err := proc.Signal(os.Kill); err != nil {
+			log.Println("term:", err)
+		}
+		<-stdoutDone
+	}
+
+	if _, err := proc.Wait(); err != nil {
+		log.Println("wait:", err)
+	}
+
+	sendFiles(ws, destination)
+	ws.Close()
+}
+
+func sendFiles(ws *websocket.Conn, directory string) error {
+	files, err := os.ReadDir(directory)
+
+	if err != nil {
+		return err
+	}
+
+	var fileNames []string
+	for _, f := range files {
+		fileNames = append(fileNames, f.Name())
+	}
+
+	log.Printf("TODO pass back files: %v", fileNames)
+
+	return nil
+}
+
 func main() {
 	log.SetFlags(0)
 	flag.Parse()
@@ -228,5 +345,15 @@ func main() {
 
 	log.Printf("proxying /check to %s", checkProgram)
 	http.HandleFunc("/check", serveCheck)
+
+	inProgram, err = exec.LookPath(*inPath)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("proxying /in to %s", inProgram)
+	http.HandleFunc("/in", serveIn)
+
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
