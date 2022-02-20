@@ -27,6 +27,7 @@ type Output struct {
 
 func main() {
 	log.SetFlags(0)
+	log.SetOutput(os.Stderr)
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
