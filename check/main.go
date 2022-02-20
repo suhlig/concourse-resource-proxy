@@ -86,7 +86,7 @@ func main() {
 			}
 
 			log.Printf("< %s", message)
-			fmt.Println(message)
+			fmt.Println(string(message))
 		}
 	}()
 
