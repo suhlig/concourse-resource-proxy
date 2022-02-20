@@ -170,7 +170,7 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 	// TODO Pass environment variables to in and out
 	// TODO Pass a temporary directory to in and out as $1
 
-	proc, err := os.StartProcess(checkProgram, []string{}, &os.ProcAttr{
+	proc, err := os.StartProcess(checkProgram, []string{checkProgram}, &os.ProcAttr{
 		Files: []*os.File{stdinReader, stdoutWriter, stderrWriter},
 	})
 

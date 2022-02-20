@@ -85,7 +85,7 @@ func main() {
 				return
 			}
 
-			log.Printf("< %s", message)
+			log.Printf("C< %s", message)
 			fmt.Println(string(message))
 		}
 	}()
@@ -101,7 +101,7 @@ func main() {
 
 	// TODO Pass environment variables to in and out
 
-	log.Printf("> %s\n", output)
+	log.Printf("C> %s\n", output)
 	err = ws.WriteMessage(websocket.TextMessage, output)
 
 	if err != nil {
