@@ -47,30 +47,34 @@ func main() {
 		log.Fatal(err)
 	}
 
-	u, err := url.Parse(input.Source.URL)
+	url, err := url.Parse(input.Source.URL)
 
 	if err != nil {
 		log.Fatal("parse:", err)
 	}
 
-	if !(u.Scheme == "ws" || u.Scheme == "wss") {
+	if !(url.Scheme == "ws" || url.Scheme == "wss") {
 		log.Fatal("Error: uri scheme must be ws or wss")
 	}
 
-	if !strings.HasSuffix(u.Path, "/") {
-		u.Path = u.Path + "/"
+	if !strings.HasSuffix(url.Path, "/") {
+		url.Path = url.Path + "/"
 	}
 
-	u.Path = u.Path + "in"
+	url.Path = url.Path + "in"
 
-	log.Printf("proxying in to %s: ", u.String())
+	log.Printf("proxying in to %s: ", url.String())
 
-	ws, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	ws, _, err := websocket.DefaultDialer.Dial(url.String(), nil)
 
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
 
+	ws.SetCloseHandler(func(code int, text string) error {
+		log.Printf("ending with code %d: %s", code, text)
+		return nil
+	})
 	defer ws.Close()
 
 	done := make(chan struct{})
@@ -84,6 +88,7 @@ func main() {
 				if messageType != -1 { // noFrame
 					log.Printf("Error: %s", err)
 				}
+
 				return
 			}
 
@@ -123,10 +128,12 @@ func main() {
 			// Cleanly close the connection by sending a close message and then
 			// waiting (with timeout) for the server to close the connection.
 			err := ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+
 			if err != nil {
 				log.Println("write close:", err)
 				return
 			}
+
 			select {
 			case <-done:
 			case <-time.After(time.Second):

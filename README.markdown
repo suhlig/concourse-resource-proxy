@@ -167,22 +167,27 @@ $ fly \
 
 # Development
 
-Manually invoke the time resource via proxy (does not need Concourse). Assumes that the server is listening on `wss://example.com`.
+* Manually invoke the time resource via proxy (does not need Concourse). Assumes that the server is listening on `wss://example.com`.
 
-```command
-$ echo '{
-  "source": {
-    "url": "wss://example.com",
-    "token": "s3cret",
-    "proxied": {
-      "interval": "30m"
+  ```command
+  $ echo '{
+    "source": {
+      "url": "wss://example.com",
+      "token": "s3cret",
+      "proxied": {
+        "interval": "30m"
+      }
+    },
+    "version": {
+      "time":"2022-02-19T21:07:00Z"
     }
-  },
-  "version": {
-    "time":"2022-02-19T21:07:00Z"
-  }
-}' | go run check/main.go
-```
+  }' | go run check/main.go
+  ```
+* Iterate over the server (restart when server files were changed):
+
+    ```command
+    $ find server -type f -name '*.go' | entr -d -r -z go run server/main.go --addr localhost:8123 --check ../concourse-time-resource/check/check --in ../concourse-time-resource/in/in
+    ```
 
 # License
 

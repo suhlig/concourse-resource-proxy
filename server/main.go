@@ -89,7 +89,7 @@ func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}) {
 	close(done)
 
 	ws.SetWriteDeadline(time.Now().Add(writeWait))
-	ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "done reading STDOUT"))
 	time.Sleep(closeGracePeriod)
 	ws.Close()
 }

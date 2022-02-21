@@ -45,25 +45,25 @@ func main() {
 		log.Fatal(err)
 	}
 
-	u, err := url.Parse(input.Source.URL)
+	url, err := url.Parse(input.Source.URL)
 
 	if err != nil {
 		log.Fatal("parse:", err)
 	}
 
-	if !(u.Scheme == "ws" || u.Scheme == "wss") {
+	if !(url.Scheme == "ws" || url.Scheme == "wss") {
 		log.Fatal("Error: uri scheme must be ws or wss")
 	}
 
-	if !strings.HasSuffix(u.Path, "/") {
-		u.Path = u.Path + "/"
+	if !strings.HasSuffix(url.Path, "/") {
+		url.Path = url.Path + "/"
 	}
 
-	u.Path = u.Path + "check"
+	url.Path = url.Path + "check"
 
-	log.Printf("proxying check to %s: ", u.String())
+	log.Printf("proxying check to %s: ", url.String())
 
-	ws, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	ws, _, err := websocket.DefaultDialer.Dial(url.String(), nil)
 
 	if err != nil {
 		log.Fatal("dial:", err)
