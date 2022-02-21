@@ -10,7 +10,9 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"os"
 	"os/exec"
 	"path"
@@ -327,19 +329,46 @@ func sendFiles(ws *websocket.Conn, directory string) error {
 		return err
 	}
 
+	// this is a bit of a hack - we send STDOUT as websocket.TextMessage
+	// and files as websocket.BinaryMessage, so that we can distinguish them.
+	// The files are also wrapped in a multipart container so that we can add the
+	// meta data (file names etc.).
+	w, err := ws.NextWriter(websocket.BinaryMessage)
+
+	if err != nil {
+		return err
+	}
+
+	writer := multipart.NewWriter(w)
+
 	for _, f := range files {
 		content, err := ioutil.ReadFile(path.Join(directory, f.Name()))
 
 		if err != nil {
 			log.Printf("Could not read file: %v", err)
 		} else {
-			err = ws.WriteMessage(websocket.BinaryMessage, content)
+			log.Printf("Adding part for %v", f.Name())
+
+			part, err := writer.CreatePart(textproto.MIMEHeader{
+				"Content-Type":         {"application/octet-stream"},
+				"X-Concourse-Filename": {f.Name()},
+			})
+
+			if err != nil {
+				log.Printf("Could not create part: %v", err)
+				continue
+			}
+
+			part.Write(content)
 
 			if err != nil {
 				log.Printf("Could not write file: %v", err)
+				continue
 			}
 		}
 	}
+
+	writer.Close()
 
 	return nil
 }

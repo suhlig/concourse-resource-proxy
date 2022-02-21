@@ -5,12 +5,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 	"time"
 
@@ -33,9 +37,17 @@ type InMessage struct {
 	Params  map[string]string `json:"params"`
 }
 
+const concourseFileNameHeader = "X-Concourse-Filename"
+
 func main() {
 	log.SetFlags(0)
 	log.SetOutput(os.Stderr)
+
+	if len(os.Args) < 2 {
+		log.Fatal("Missing parameter for the destination directory")
+	}
+
+	destination := os.Args[1]
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
@@ -97,7 +109,46 @@ func main() {
 				log.Printf("I< %s", message)
 				fmt.Println(string(message))
 			case websocket.BinaryMessage:
-				log.Printf("TODO writing file content to %s: %s", os.Args[1], message)
+				boundary := getBoundary(message) // hack; perhaps create proper Content-Disposition header?
+				mr := multipart.NewReader(bytes.NewReader(message), boundary)
+
+				for {
+					part, err := mr.NextPart()
+
+					if err == io.EOF {
+						return
+					}
+
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					fileName := part.Header.Get(concourseFileNameHeader)
+
+					if fileName == "" {
+						log.Printf("Warning: skipping part because it has no %s set", concourseFileNameHeader)
+						continue
+					}
+
+					partFile := path.Join(destination, fileName)
+					f, err := os.Create(partFile)
+
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+
+					defer f.Close()
+
+					bytes, err := io.Copy(f, part)
+
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+
+					log.Printf("Part %q: %d bytes written to %v\n", fileName, bytes, partFile)
+				}
 			default:
 				log.Printf("Unable to handle message type %d", messageType)
 			}
@@ -147,4 +198,10 @@ func main() {
 			return
 		}
 	}
+}
+
+func getBoundary(message []byte) string {
+	line0 := strings.Split(string(message), "\r\n")[0]
+	withoutPrefix := strings.TrimPrefix(line0, "--")
+	return strings.TrimSuffix(withoutPrefix, "--")
 }
