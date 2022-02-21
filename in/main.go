@@ -92,10 +92,15 @@ func main() {
 				return
 			}
 
-			log.Printf("I< %s", message)
-			fmt.Println(string(message))
-
-			log.Printf("TODO writing files to %s", os.Args[1])
+			switch messageType {
+			case websocket.TextMessage:
+				log.Printf("I< %s", message)
+				fmt.Println(string(message))
+			case websocket.BinaryMessage:
+				log.Printf("TODO writing file content to %s: %s", os.Args[1], message)
+			default:
+				log.Printf("Unable to handle message type %d", messageType)
+			}
 		}
 	}()
 

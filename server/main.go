@@ -8,10 +8,12 @@ import (
 	"bufio"
 	"flag"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -65,7 +67,7 @@ func pumpStdin(ws *websocket.Conn, stdin io.Writer) {
 	}
 }
 
-func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}) {
+func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}, resourceDirectory string) {
 	defer func() {
 	}()
 	s := bufio.NewScanner(stdout)
@@ -87,6 +89,10 @@ func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}) {
 	}
 
 	close(done)
+
+	if resourceDirectory != "" {
+		sendFiles(ws, resourceDirectory)
+	}
 
 	ws.SetWriteDeadline(time.Now().Add(writeWait))
 	ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "done reading STDOUT"))
@@ -187,7 +193,7 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 	stderrWriter.Close()
 
 	stdoutDone := make(chan struct{})
-	go pumpStdout(stdoutReader, ws, stdoutDone)
+	go pumpStdout(stdoutReader, ws, stdoutDone, "")
 	go ping(ws, stdoutDone)
 
 	stderrDone := make(chan struct{})
@@ -281,7 +287,7 @@ func serveIn(w http.ResponseWriter, r *http.Request) {
 	stderrWriter.Close()
 
 	stdoutDone := make(chan struct{})
-	go pumpStdout(stdoutReader, ws, stdoutDone)
+	go pumpStdout(stdoutReader, ws, stdoutDone, destination)
 	go ping(ws, stdoutDone)
 
 	stderrDone := make(chan struct{})
@@ -311,7 +317,6 @@ func serveIn(w http.ResponseWriter, r *http.Request) {
 		log.Println("wait:", err)
 	}
 
-	sendFiles(ws, destination)
 	ws.Close()
 }
 
@@ -322,12 +327,19 @@ func sendFiles(ws *websocket.Conn, directory string) error {
 		return err
 	}
 
-	var fileNames []string
 	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+		content, err := ioutil.ReadFile(path.Join(directory, f.Name()))
 
-	log.Printf("TODO pass back files: %v", fileNames)
+		if err != nil {
+			log.Printf("Could not read file: %v", err)
+		} else {
+			err = ws.WriteMessage(websocket.BinaryMessage, content)
+
+			if err != nil {
+				log.Printf("Could not write file: %v", err)
+			}
+		}
+	}
 
 	return nil
 }
