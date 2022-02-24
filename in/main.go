@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"mime/multipart"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -77,10 +78,12 @@ func main() {
 
 	log.Printf("proxying in to %s: ", url.String())
 
-	ws, _, err := websocket.DefaultDialer.Dial(url.String(), nil)
+	ws, response, err := websocket.DefaultDialer.Dial(url.String(), http.Header{
+		"Authorization": []string{input.Source.Token},
+	})
 
 	if err != nil {
-		log.Fatal("dial:", err)
+		log.Fatalf("Could not connect: %s (error %v)", err, response.Status)
 	}
 
 	ws.SetCloseHandler(func(code int, text string) error {

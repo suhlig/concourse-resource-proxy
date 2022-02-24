@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -22,11 +23,12 @@ import (
 )
 
 var (
-	addr         = flag.String("addr", "127.0.0.1:8080", "http service address")
-	checkPath    = flag.String("check", "", "path to the check executable under test")
-	inPath       = flag.String("in", "", "path to the in executable under test")
-	checkProgram string
-	inProgram    string
+	addr          = flag.String("addr", "127.0.0.1:8080", "http service address")
+	checkPath     = flag.String("check", "", "path to the check executable under test")
+	inPath        = flag.String("in", "", "path to the in executable under test")
+	requiredToken = flag.String("token", randomToken(), "authentication token")
+	checkProgram  string
+	inProgram     string
 )
 
 const (
@@ -227,7 +229,16 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveIn(w http.ResponseWriter, r *http.Request) {
+	suppliedToken := r.Header.Get("Authorization")
+
+	if suppliedToken != *requiredToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("No or wrong auth token"))
+		return
+	}
+
 	ws, err := upgrader.Upgrade(w, r, nil)
+
 	if err != nil {
 		log.Println("upgrade:", err)
 		return
@@ -384,7 +395,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("proxying /check to %s", checkProgram)
+	log.Printf("proxying /check to %s; requiring token %s", checkProgram, *requiredToken)
 	http.HandleFunc("/check", serveCheck)
 
 	inProgram, err = exec.LookPath(*inPath)
@@ -397,4 +408,19 @@ func main() {
 	http.HandleFunc("/in", serveIn)
 
 	log.Fatal(http.ListenAndServe(*addr, nil))
+}
+
+// https://stackoverflow.com/a/22892986/3212907
+func randomToken() string {
+	rand.Seed(time.Now().UnixNano())
+
+	var stock = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890")
+
+	b := make([]rune, 32)
+
+	for i := range b {
+		b[i] = stock[rand.Intn(len(stock))]
+	}
+
+	return string(b)
 }
