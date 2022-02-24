@@ -64,12 +64,12 @@ func main() {
 
 	log.Printf("proxying check to %s: ", url.String())
 
-	ws, _, err := websocket.DefaultDialer.Dial(url.String(), http.Header{
+	ws, response, err := websocket.DefaultDialer.Dial(url.String(), http.Header{
 		"Authorization": []string{input.Source.Token},
 	})
 
 	if err != nil {
-		log.Fatal("dial:", err)
+		log.Fatalf("Could not connect: %s (error %v)", err, response.Status)
 	}
 
 	defer ws.Close()

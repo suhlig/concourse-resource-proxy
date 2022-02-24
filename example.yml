@@ -3,7 +3,7 @@ resource_types:
   type: registry-image
   source:
     repository: suhlig/concourse-resource-proxy
-    tag: 1.0.0-pre6
+    tag: 1.0.0-pre7
 
 resources:
 - name: every-5min-proxied
