@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -63,7 +64,9 @@ func main() {
 
 	log.Printf("proxying check to %s: ", url.String())
 
-	ws, _, err := websocket.DefaultDialer.Dial(url.String(), nil)
+	ws, _, err := websocket.DefaultDialer.Dial(url.String(), http.Header{
+		"Authorization": []string{input.Source.Token},
+	})
 
 	if err != nil {
 		log.Fatal("dial:", err)

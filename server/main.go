@@ -142,6 +142,14 @@ func internalError(ws *websocket.Conn, msg string, err error) {
 var upgrader = websocket.Upgrader{}
 
 func serveCheck(w http.ResponseWriter, r *http.Request) {
+	suppliedToken := r.Header.Get("Authorization")
+
+	if suppliedToken != *requiredToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("No or wrong auth token"))
+		return
+	}
+
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("upgrade:", err)
@@ -395,7 +403,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("proxying /check to %s; requiring token %s", checkProgram, *requiredToken)
+	log.Printf("requiring token %s", *requiredToken)
+
+	log.Printf("proxying /check to %s", checkProgram)
 	http.HandleFunc("/check", serveCheck)
 
 	inProgram, err = exec.LookPath(*inPath)
