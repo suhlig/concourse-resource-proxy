@@ -17,11 +17,19 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
 1. Start the server:
 
     ```command
-    $ concourse-resource-proxy \
+    $ concourse-resource-proxy-server \
         --addr localhost:8123 \
         --check ~/workspace/concourse-time-resource/check/check \
         --in    ~/workspace/concourse-time-resource/in/in \
         --out   ~/workspace/concourse-time-resource/out/out
+    ```
+
+    You can also run it in Docker:
+
+    ```command
+    # TODO mount concourse-time-resource directory
+    # TODO expose port 8123
+    $ docker run -it --rm suhlig/concourse-resource-proxy /opt/resource/server --addr localhost:8123 --check /concourse-time-resource/check
     ```
 
 1. Now you can build the time resource locally:
@@ -66,8 +74,10 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
         --target "$CONCOURSE_TARGET" \
       set-pipeline \
         --pipeline resource-proxy-example \
-        --config example.yml
+        --config example.yml \
+        --var proxy-api-token=s3cret
     ```
+
     Note that the `source.url` assumes that your local workstation is accessible via this address. You can use [ngrok](https://ngrok.com/) or similar services to forward a local port to a public URL. My personal solution is SSH remote port forwarding (`ssh -R 8123:localhost:8123 example.com`).
 
 1. Run a [manual resource check](https://concourse-ci.org/managing-resource-types.html):
@@ -167,22 +177,8 @@ $ fly \
 
 # Development
 
-* Manually invoke the time resource via proxy (does not need Concourse). Assumes that the server is listening on `wss://example.com`.
+* `scripts/test-*` manually invoke a local copy of Concourse' time resource via proxy
 
-  ```command
-  $ echo '{
-    "source": {
-      "url": "wss://example.com",
-      "token": "s3cret",
-      "proxied": {
-        "interval": "30m"
-      }
-    },
-    "version": {
-      "time":"2022-02-19T21:07:00Z"
-    }
-  }' | go run check/main.go
-  ```
 * Iterate over the server (restart when server files were changed):
 
     ```command

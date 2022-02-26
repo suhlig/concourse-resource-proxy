@@ -18,7 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type Input struct {
+type CheckRequest struct {
 	Source struct {
 		URL     string
 		Token   string
@@ -39,14 +39,14 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	var input Input
+	var request CheckRequest
 
-	err := json.NewDecoder(os.Stdin).Decode(&input)
+	err := json.NewDecoder(os.Stdin).Decode(&request)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	url, err := url.Parse(input.Source.URL)
+	url, err := url.Parse(request.Source.URL)
 
 	if err != nil {
 		log.Fatal("parse:", err)
@@ -65,7 +65,7 @@ func main() {
 	log.Printf("proxying check to %s: ", url.String())
 
 	ws, response, err := websocket.DefaultDialer.Dial(url.String(), http.Header{
-		"Authorization": []string{input.Source.Token},
+		"Authorization": []string{request.Source.Token},
 	})
 
 	if err != nil {
@@ -94,15 +94,13 @@ func main() {
 	}()
 
 	output, err := json.Marshal(CheckMessage{
-		Source:  input.Source.Proxied,
-		Version: input.Version,
+		Source:  request.Source.Proxied,
+		Version: request.Version,
 	})
 
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// TODO Pass environment variables to in and out
 
 	log.Printf("C> %s\n", output)
 	err = ws.WriteMessage(websocket.TextMessage, output)

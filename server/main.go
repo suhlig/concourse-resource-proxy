@@ -8,27 +8,27 @@ import (
 	"bufio"
 	"flag"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
-	"mime/multipart"
 	"net/http"
-	"net/textproto"
 	"os"
 	"os/exec"
-	"path"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/suhlig/concourse-resource-proxy/models"
 )
 
 var (
 	addr          = flag.String("addr", "127.0.0.1:8080", "http service address")
-	checkPath     = flag.String("check", "", "path to the check executable under test")
-	inPath        = flag.String("in", "", "path to the in executable under test")
+	checkPath     = flag.String("check", "", "path to the `check` executable under test")
+	inPath        = flag.String("in", "", "path to the `in` executable under test")
+	outPath       = flag.String("out", "", "path to the `out` executable under test")
 	requiredToken = flag.String("token", randomToken(), "authentication token")
 	checkProgram  string
 	inProgram     string
+	outProgram    string
+	upgrader      = websocket.Upgrader{}
 )
 
 const (
@@ -47,6 +47,43 @@ const (
 	// Time to wait before force close on connection.
 	closeGracePeriod = 10 * time.Second
 )
+
+func main() {
+	log.SetFlags(0)
+	flag.Parse()
+
+	var err error
+	checkProgram, err = exec.LookPath(*checkPath)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("requiring token %s", *requiredToken)
+
+	log.Printf("proxying /check to %s", checkProgram)
+	http.HandleFunc("/check", serveCheck)
+
+	inProgram, err = exec.LookPath(*inPath)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("proxying /in to %s", inProgram)
+	http.HandleFunc("/in", serveIn)
+
+	outProgram, err = exec.LookPath(*outPath)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("proxying /out to %s", outProgram)
+	http.HandleFunc("/out", serveOut)
+
+	log.Fatal(http.ListenAndServe(*addr, nil))
+}
 
 func pumpStdin(ws *websocket.Conn, stdin io.Writer) {
 	defer ws.Close()
@@ -74,7 +111,10 @@ func pumpStdin(ws *websocket.Conn, stdin io.Writer) {
 func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}, resourceDirectory string) {
 	defer func() {
 	}()
+
 	s := bufio.NewScanner(stdout)
+
+	// forward lines on STDIN as websocket text message
 	for s.Scan() {
 		ws.SetWriteDeadline(time.Now().Add(writeWait))
 		message := s.Bytes()
@@ -92,10 +132,12 @@ func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}, resour
 		log.Println("scan:", s.Err())
 	}
 
-	close(done)
+	if !isClosed(done) {
+		close(done)
+	}
 
 	if resourceDirectory != "" {
-		sendFiles(ws, resourceDirectory)
+		models.SendFiles(ws, resourceDirectory)
 	}
 
 	ws.SetWriteDeadline(time.Now().Add(writeWait))
@@ -138,8 +180,6 @@ func internalError(ws *websocket.Conn, msg string, err error) {
 	log.Println(msg, err)
 	ws.WriteMessage(websocket.TextMessage, []byte(msg))
 }
-
-var upgrader = websocket.Upgrader{}
 
 func serveCheck(w http.ResponseWriter, r *http.Request) {
 	suppliedToken := r.Header.Get("Authorization")
@@ -187,9 +227,6 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 
 	defer stderrReader.Close()
 	defer stderrWriter.Close()
-
-	// TODO Pass environment variables to in and out
-	// TODO Pass a temporary directory to in and out as $1
 
 	proc, err := os.StartProcess(checkProgram, []string{checkProgram}, &os.ProcAttr{
 		Files: []*os.File{stdinReader, stdoutWriter, stderrWriter},
@@ -284,7 +321,7 @@ func serveIn(w http.ResponseWriter, r *http.Request) {
 	defer stderrReader.Close()
 	defer stderrWriter.Close()
 
-	destination, err := os.MkdirTemp("", "concourse-resource-proxy-server-*")
+	destination, err := os.MkdirTemp("", "concourse-resource-proxy-server-in-*")
 
 	if err != nil {
 		internalError(ws, "stderr:", err)
@@ -293,7 +330,7 @@ func serveIn(w http.ResponseWriter, r *http.Request) {
 
 	defer os.RemoveAll(destination)
 
-	// TODO Pass environment variables
+	// TODO Set received environment variables for inProgram
 	proc, err := os.StartProcess(inProgram, []string{inProgram, destination}, &os.ProcAttr{
 		Files: []*os.File{stdinReader, stdoutWriter, stderrWriter},
 	})
@@ -341,83 +378,112 @@ func serveIn(w http.ResponseWriter, r *http.Request) {
 	ws.Close()
 }
 
-func sendFiles(ws *websocket.Conn, directory string) error {
-	files, err := os.ReadDir(directory)
+func serveOut(w http.ResponseWriter, r *http.Request) {
+	suppliedToken := r.Header.Get("Authorization")
 
-	if err != nil {
-		return err
+	if suppliedToken != *requiredToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("No or wrong auth token"))
+		return
 	}
 
-	// this is a bit of a hack - we send STDOUT as websocket.TextMessage
-	// and files as websocket.BinaryMessage, so that we can distinguish them.
-	// The files are also wrapped in a multipart container so that we can add the
-	// meta data (file names etc.).
-	w, err := ws.NextWriter(websocket.BinaryMessage)
+	ws, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
-		return err
+		log.Println("upgrade:", err)
+		return
 	}
 
-	writer := multipart.NewWriter(w)
+	defer ws.Close()
 
-	for _, f := range files {
-		content, err := ioutil.ReadFile(path.Join(directory, f.Name()))
+	stdinReader, stdinWriter, err := os.Pipe()
 
-		if err != nil {
-			log.Printf("Could not read file: %v", err)
-		} else {
-			log.Printf("Adding part for %v", f.Name())
+	if err != nil {
+		internalError(ws, "stdin:", err)
+		return
+	}
 
-			part, err := writer.CreatePart(textproto.MIMEHeader{
-				"Content-Type":         {"application/octet-stream"},
-				"X-Concourse-Filename": {f.Name()},
-			})
+	defer stdinReader.Close()
+	defer stdinWriter.Close()
 
-			if err != nil {
-				log.Printf("Could not create part: %v", err)
-				continue
-			}
+	stdoutReader, stdoutWriter, err := os.Pipe()
 
-			part.Write(content)
+	if err != nil {
+		internalError(ws, "stdout:", err)
+		return
+	}
 
-			if err != nil {
-				log.Printf("Could not write file: %v", err)
-				continue
-			}
+	defer stdoutReader.Close()
+	defer stdoutWriter.Close()
+
+	stderrReader, stderrWriter, err := os.Pipe()
+
+	if err != nil {
+		internalError(ws, "stderr:", err)
+		return
+	}
+
+	defer stderrReader.Close()
+	defer stderrWriter.Close()
+	stdoutDone := make(chan struct{})
+
+	sourceDirectory, err := os.MkdirTemp("", "concourse-resource-proxy-server-out-*")
+
+	if err != nil {
+		internalError(ws, "stderr:", err)
+		return
+	}
+
+	defer os.RemoveAll(sourceDirectory)
+
+	// receive files and put them into sourceDirectory so that outProgram can do it's thing
+	models.ReceiveFiles(ws, sourceDirectory, "O", stdoutDone)
+
+	// TODO Set received environment variables for inProgram
+	proc, err := os.StartProcess(outProgram, []string{outProgram, sourceDirectory}, &os.ProcAttr{
+		Files: []*os.File{stdinReader, stdoutWriter, stderrWriter},
+	})
+
+	if err != nil {
+		internalError(ws, "start:", err)
+		return
+	}
+
+	stdinReader.Close()
+	stdoutWriter.Close()
+	stderrWriter.Close()
+
+	go pumpStdout(stdoutReader, ws, stdoutDone, "")
+	go ping(ws, stdoutDone)
+
+	stderrDone := make(chan struct{})
+	go pumpStderr(stderrReader, stderrDone)
+
+	pumpStdin(ws, stdinWriter)
+
+	stdinWriter.Close() // Some commands will exit when stdin is closed.
+
+	// Other commands need a bonk on the head.
+	if err := proc.Signal(os.Interrupt); err != nil {
+		log.Println("inter:", err)
+	}
+
+	select {
+	case <-stdoutDone:
+	case <-stderrDone:
+	case <-time.After(time.Second):
+		// A bigger bonk on the head.
+		if err := proc.Signal(os.Kill); err != nil {
+			log.Println("term:", err)
 		}
+		<-stdoutDone
 	}
 
-	writer.Close()
-
-	return nil
-}
-
-func main() {
-	log.SetFlags(0)
-	flag.Parse()
-
-	var err error
-	checkProgram, err = exec.LookPath(*checkPath)
-
-	if err != nil {
-		log.Fatal(err)
+	if _, err := proc.Wait(); err != nil {
+		log.Println("wait:", err)
 	}
 
-	log.Printf("requiring token %s", *requiredToken)
-
-	log.Printf("proxying /check to %s", checkProgram)
-	http.HandleFunc("/check", serveCheck)
-
-	inProgram, err = exec.LookPath(*inPath)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("proxying /in to %s", inProgram)
-	http.HandleFunc("/in", serveIn)
-
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	ws.Close()
 }
 
 // https://stackoverflow.com/a/22892986/3212907
@@ -433,4 +499,14 @@ func randomToken() string {
 	}
 
 	return string(b)
+}
+
+func isClosed(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+	}
+
+	return false
 }

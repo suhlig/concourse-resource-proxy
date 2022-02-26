@@ -5,24 +5,20 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/suhlig/concourse-resource-proxy/models"
 )
 
-type Input struct {
+type InRequest struct {
 	Source struct {
 		URL     string
 		Token   string
@@ -38,8 +34,6 @@ type InMessage struct {
 	Params  map[string]string `json:"params"`
 }
 
-const concourseFileNameHeader = "X-Concourse-Filename"
-
 func main() {
 	log.SetFlags(0)
 	log.SetOutput(os.Stderr)
@@ -48,19 +42,19 @@ func main() {
 		log.Fatal("Missing parameter for the destination directory")
 	}
 
-	destination := os.Args[1]
+	destinationDirectory := os.Args[1]
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	var input Input
+	var request InRequest
 
-	err := json.NewDecoder(os.Stdin).Decode(&input)
+	err := json.NewDecoder(os.Stdin).Decode(&request)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	url, err := url.Parse(input.Source.URL)
+	url, err := url.Parse(request.Source.URL)
 
 	if err != nil {
 		log.Fatal("parse:", err)
@@ -79,7 +73,7 @@ func main() {
 	log.Printf("proxying in to %s: ", url.String())
 
 	ws, response, err := websocket.DefaultDialer.Dial(url.String(), http.Header{
-		"Authorization": []string{input.Source.Token},
+		"Authorization": []string{request.Source.Token},
 	})
 
 	if err != nil {
@@ -90,78 +84,17 @@ func main() {
 		log.Printf("ending with code %d: %s", code, text)
 		return nil
 	})
+
 	defer ws.Close()
 
 	done := make(chan struct{})
 
-	go func() {
-		defer close(done)
-		for {
-			messageType, message, err := ws.ReadMessage()
+	go models.ReceiveFiles(ws, destinationDirectory, "I", done)
 
-			if err != nil {
-				if messageType != -1 { // noFrame
-					log.Printf("Error: %s", err)
-				}
-
-				return
-			}
-
-			switch messageType {
-			case websocket.TextMessage:
-				log.Printf("I< %s", message)
-				fmt.Println(string(message))
-			case websocket.BinaryMessage:
-				boundary := getBoundary(message) // hack; perhaps create proper Content-Disposition header?
-				mr := multipart.NewReader(bytes.NewReader(message), boundary)
-
-				for {
-					part, err := mr.NextPart()
-
-					if err == io.EOF {
-						return
-					}
-
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					fileName := part.Header.Get(concourseFileNameHeader)
-
-					if fileName == "" {
-						log.Printf("Warning: skipping part because it has no %s set", concourseFileNameHeader)
-						continue
-					}
-
-					partFile := path.Join(destination, fileName)
-					f, err := os.Create(partFile)
-
-					if err != nil {
-						log.Println(err)
-						continue
-					}
-
-					defer f.Close()
-
-					bytes, err := io.Copy(f, part)
-
-					if err != nil {
-						log.Println(err)
-						continue
-					}
-
-					log.Printf("Part %q: %d bytes written to %v\n", fileName, bytes, partFile)
-				}
-			default:
-				log.Printf("Unable to handle message type %d", messageType)
-			}
-		}
-	}()
-
-	output, err := json.Marshal(InMessage{
-		Source:  input.Source.Proxied,
-		Version: input.Version,
-		Params:  input.Params,
+	message, err := json.Marshal(InMessage{
+		Source:  request.Source.Proxied,
+		Version: request.Version,
+		Params:  request.Params,
 	})
 
 	if err != nil {
@@ -170,8 +103,8 @@ func main() {
 
 	// TODO Pass environment variables
 
-	log.Printf("I> %s\n", output)
-	err = ws.WriteMessage(websocket.TextMessage, output)
+	log.Printf("I> %s\n", message)
+	err = ws.WriteMessage(websocket.TextMessage, message)
 
 	if err != nil {
 		log.Fatal(err)
@@ -201,10 +134,4 @@ func main() {
 			return
 		}
 	}
-}
-
-func getBoundary(message []byte) string {
-	line0 := strings.Split(string(message), "\r\n")[0]
-	withoutPrefix := strings.TrimPrefix(line0, "--")
-	return strings.TrimSuffix(withoutPrefix, "--")
 }

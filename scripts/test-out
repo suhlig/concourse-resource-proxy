@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -euo pipefail
+IFS=$'\n\t'
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+declare -r source="${1:?Argument for source directory is missing}"
+declare -r url="${WSS_PROXY_URL:?missing}"
+declare -r token="${WSS_PROXY_TOKEN:?missing}"
+
+jq --null-input \
+   --arg token "$token" \
+   --arg url "$url" \
+'{
+  source: {
+    url: $url,
+    token: $token,
+    proxied: {
+      interval: "10s"
+    }
+  },
+  version: {
+    time: "2022-02-19T21:07:00Z"
+  }
+}' | go run "$root"/../out/main.go "$source"
