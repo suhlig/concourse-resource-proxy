@@ -139,7 +139,9 @@ Files created by the resource under development are copied into the output direc
 
 ## `out`
 
-TODO
+Reads `STDIN` and posts it to `((source.url))/out` (e.g. `https://example.com/out`). The response is written to `STDOUT` and `STDERR`.
+
+Files provided to the proxy at `$1` are copied and made available to the resource under development likewise.
 
 # `server`
 
@@ -153,8 +155,7 @@ Invokes `in` of the resource under development and passes the incoming stream of
 
 ## `/out`
 
-TODO
-
+Files received from the server are copied into a temporary directory. Then, `out` of the resource under development is invoked and the incoming stream of bytes as `STDIN` is passed.
 # Release
 
 There is a Concourse pipeline in `ci`. It creates a draft GitHub release for every tag:
