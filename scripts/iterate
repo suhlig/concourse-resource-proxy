@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pipefail
+IFS=$'\n\t'
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+trap exit SIGINT
+
+while true; do
+  find server -type f -name '*.go' \
+    | entr -d -r -z go run server/main.go \
+    --addr localhost:8123 \
+    --token "${WSS_PROXY_TOKEN:?missing}" \
+    --check "$root"/../../concourse-time-resource/check/check \
+    --in    "$root"/../../concourse-time-resource/in/in \
+    --out   "$root"/../../concourse-time-resource/out/out
+done

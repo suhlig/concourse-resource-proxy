@@ -178,18 +178,7 @@ $ fly \
 # Development
 
 * `scripts/test-*` manually invoke a local copy of Concourse' time resource via proxy
-
-* Iterate over the server (restart when server files were changed):
-
-    ```command
-    $ find server -type f -name '*.go' \
-      | entr -d -r -z go run server/main.go \
-      --addr localhost:8123 \
-      --token "${WSS_PROXY_TOKEN:?missing}" \
-      --check ../concourse-time-resource/check/check \
-      --in ../concourse-time-resource/in/in \
-      --out ../concourse-time-resource/out/out
-    ```
+* `scripts/iterate` restarts the server when go files were changed
 
 # License
 
