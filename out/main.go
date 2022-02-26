@@ -109,7 +109,7 @@ func main() {
 	}
 
 	// TODO Pass environment variables
-	log.Printf("O> %s\n", message)
+	log.Printf("> %s\n", message)
 	err = ws.WriteMessage(websocket.TextMessage, message)
 
 	if err != nil {

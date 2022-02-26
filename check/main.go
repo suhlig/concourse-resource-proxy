@@ -102,7 +102,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("C> %s\n", output)
+	log.Printf("> %s\n", output)
 	err = ws.WriteMessage(websocket.TextMessage, output)
 
 	if err != nil {

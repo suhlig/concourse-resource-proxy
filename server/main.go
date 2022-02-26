@@ -85,7 +85,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
 
-func pumpStdin(ws *websocket.Conn, stdin io.Writer) {
+func pumpStdin(ws *websocket.Conn, stdin io.Writer, marker string) {
 	defer ws.Close()
 	ws.SetReadLimit(maxMessageSize)
 	ws.SetReadDeadline(time.Now().Add(pongWait))
@@ -108,7 +108,7 @@ func pumpStdin(ws *websocket.Conn, stdin io.Writer) {
 	}
 }
 
-func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}, resourceDirectory string) {
+func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}, resourceDirectory, marker string) {
 	defer func() {
 	}()
 
@@ -119,7 +119,7 @@ func pumpStdout(stdout io.Reader, ws *websocket.Conn, done chan struct{}, resour
 		ws.SetWriteDeadline(time.Now().Add(writeWait))
 		message := s.Bytes()
 
-		log.Printf("> %s", message)
+		log.Printf("%s> %s", marker, message)
 
 		if err := ws.WriteMessage(websocket.TextMessage, message); err != nil {
 			log.Printf("E: %s", err)
@@ -242,13 +242,13 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 	stderrWriter.Close()
 
 	stdoutDone := make(chan struct{})
-	go pumpStdout(stdoutReader, ws, stdoutDone, "")
+	go pumpStdout(stdoutReader, ws, stdoutDone, "", "C")
 	go ping(ws, stdoutDone)
 
 	stderrDone := make(chan struct{})
 	go pumpStderr(stderrReader, stderrDone)
 
-	pumpStdin(ws, stdinWriter)
+	pumpStdin(ws, stdinWriter, "C")
 
 	stdinWriter.Close() // Some commands will exit when stdin is closed.
 
@@ -345,13 +345,13 @@ func serveIn(w http.ResponseWriter, r *http.Request) {
 	stderrWriter.Close()
 
 	stdoutDone := make(chan struct{})
-	go pumpStdout(stdoutReader, ws, stdoutDone, destination)
+	go pumpStdout(stdoutReader, ws, stdoutDone, destination, "I")
 	go ping(ws, stdoutDone)
 
 	stderrDone := make(chan struct{})
 	go pumpStderr(stderrReader, stderrDone)
 
-	pumpStdin(ws, stdinWriter)
+	pumpStdin(ws, stdinWriter, "I")
 
 	stdinWriter.Close() // Some commands will exit when stdin is closed.
 
@@ -453,13 +453,13 @@ func serveOut(w http.ResponseWriter, r *http.Request) {
 	stdoutWriter.Close()
 	stderrWriter.Close()
 
-	go pumpStdout(stdoutReader, ws, stdoutDone, "")
+	go pumpStdout(stdoutReader, ws, stdoutDone, "", "O")
 	go ping(ws, stdoutDone)
 
 	stderrDone := make(chan struct{})
 	go pumpStderr(stderrReader, stderrDone)
 
-	pumpStdin(ws, stdinWriter)
+	pumpStdin(ws, stdinWriter, "O")
 
 	stdinWriter.Close() // Some commands will exit when stdin is closed.
 
