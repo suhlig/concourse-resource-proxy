@@ -18,40 +18,7 @@ import (
 
 const concourseFileNameHeader = "X-Concourse-Filename"
 
-func SendFileTree(ws *websocket.Conn, directory string) error {
-	err := filepath.Walk(directory, func(path string, info os.FileInfo, e error) error {
-		if e != nil {
-			return e
-		}
-
-		if info.Mode().IsRegular() {
-			relativePath, err := filepath.Rel(directory, path)
-
-			if err != nil {
-				return err
-			}
-
-			fmt.Printf("******* sending %v\n", relativePath)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		log.Fatalf("Could not walk output tree %s: %v", directory, err)
-	}
-
-	return nil
-}
-
-// TODO walk whole tree so that we also send files from subdirectories (see SendFileTree)
-func SendFiles(ws *websocket.Conn, directory string) error {
-	files, err := os.ReadDir(directory)
-
-	if err != nil {
-		return err
-	}
-
+func SendFiles(ws *websocket.Conn, baseDir string) error {
 	// this is a bit of a hack - we send STDOUT as websocket.TextMessage
 	// and files as websocket.BinaryMessage, so that we can distinguish them.
 	// The files are also wrapped in a multipart container so that we can add the
@@ -64,32 +31,56 @@ func SendFiles(ws *websocket.Conn, directory string) error {
 
 	writer := multipart.NewWriter(w)
 
-	for _, f := range files {
-		content, err := ioutil.ReadFile(path.Join(directory, f.Name()))
-
-		if err != nil {
-			log.Printf("Could not read file: %v", err)
-		} else {
-			part, err := writer.CreatePart(textproto.MIMEHeader{
-				"Content-Type":         {"application/octet-stream"},
-				"X-Concourse-Filename": {f.Name()},
-			})
-
-			if err != nil {
-				log.Printf("Could not create part: %v", err)
-				continue
-			}
-
-			part.Write(content)
-
-			if err != nil {
-				log.Printf("Could not write file: %v", err)
-				continue
-			}
+	err = filepath.Walk(baseDir, func(path string, info os.FileInfo, e error) error {
+		if e != nil {
+			return e
 		}
+
+		if info.Mode().IsRegular() {
+			relativePath, err := filepath.Rel(baseDir, path)
+
+			if err != nil {
+				return err
+			}
+
+			writeFile(writer, baseDir, relativePath)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Fatalf("Could not walk output tree %s: %v", baseDir, err)
 	}
 
 	writer.Close()
+
+	return nil
+}
+
+func writeFile(writer *multipart.Writer, baseDir, relativePath string) error {
+	content, err := ioutil.ReadFile(path.Join(baseDir, relativePath))
+
+	if err != nil {
+		log.Printf("Could not read file: %v", err)
+	} else {
+		part, err := writer.CreatePart(textproto.MIMEHeader{
+			"Content-Type":         {"application/octet-stream"},
+			"X-Concourse-Filename": {relativePath},
+		})
+
+		if err != nil {
+			log.Printf("Could not create part: %v", err)
+			return err
+		}
+
+		part.Write(content)
+
+		if err != nil {
+			log.Printf("Could not write file: %v", err)
+			return err
+		}
+	}
 
 	return nil
 }
