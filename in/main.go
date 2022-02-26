@@ -80,11 +80,6 @@ func main() {
 		log.Fatalf("Could not connect: %s (error %v)", err, response.Status)
 	}
 
-	ws.SetCloseHandler(func(code int, text string) error {
-		log.Printf("ending with code %d: %s", code, text)
-		return nil
-	})
-
 	defer ws.Close()
 
 	done := make(chan struct{})
