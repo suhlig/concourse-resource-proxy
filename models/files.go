@@ -125,7 +125,15 @@ func ReceiveFiles(ws *websocket.Conn, directory, marker string, done chan struct
 					continue
 				}
 
-				partFile := path.Join(directory, fileName)
+				fullPath := path.Join(directory, path.Dir(fileName))
+				err = os.MkdirAll(fullPath, os.ModePerm)
+
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+
+				partFile := path.Join(fullPath, path.Base(fileName))
 				f, err := os.Create(partFile)
 
 				if err != nil {
