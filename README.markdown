@@ -134,7 +134,7 @@ Reads `STDIN` and forwards it to `((source.url))/check` (e.g. `https://example.c
 
 ## `in`
 
-Reads `STDIN` and posts it to `((source.url))/check` (e.g. `https://example.com/check`). The response is written to `STDOUT` and `STDERR`.
+Reads `STDIN` and forwards it to `((source.url))/check` (e.g. `https://example.com/check`). The response is written to `STDOUT` and `STDERR`.
 
 Files created by the resource under development are copied into the output directory `$1`.
 
@@ -142,7 +142,7 @@ Files created by the resource under development are copied into the output direc
 
 ## `out`
 
-Reads `STDIN` and posts it to `((source.url))/out` (e.g. `https://example.com/out`). The response is written to `STDOUT` and `STDERR`.
+Reads `STDIN` and forwards it to `((source.url))/out` (e.g. `https://example.com/out`). The response is written to `STDOUT` and `STDERR`.
 
 Files provided to the proxy at `$1` are copied and made available to the resource under development likewise.
 
