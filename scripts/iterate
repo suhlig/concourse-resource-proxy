@@ -4,9 +4,15 @@ set -euo pipefail
 IFS=$'\n\t'
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-trap exit SIGINT
+trap pleaseStop SIGINT
 
-while true; do
+shouldRun=true
+
+pleaseStop(){
+  shouldRun=false
+}
+
+while [[ $shouldRun == "true" ]]; do
   find server -type f -name '*.go' \
     | entr -d -r -z go run server/main.go \
     --addr localhost:8123 \

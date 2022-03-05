@@ -228,6 +228,7 @@ func serveCheck(w http.ResponseWriter, r *http.Request) {
 	defer stderrReader.Close()
 	defer stderrWriter.Close()
 
+	// No environment variables to be passed
 	proc, err := os.StartProcess(checkProgram, []string{checkProgram}, &os.ProcAttr{
 		Files: []*os.File{stdinReader, stdoutWriter, stderrWriter},
 	})

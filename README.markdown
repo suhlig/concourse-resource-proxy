@@ -9,6 +9,7 @@ I wanted to iterate faster on a new resource, and came up with a proxy that forw
 * The runtime environment of the resource under development is quite different from Concourse - it runs side-by-side with the server (different OS and root file system; not running in a container).
 * `STDERR` of the resource under development is not streamed back to Concourse. Instead, it directly prints to the resource server's `STDERR`.
 * The exit code of the resource under development is not transferred to the resource proxy and thus does not show up in the Concourse UI.
+* [Resource metadata](https://concourse-ci.org/implementing-resource-types.html#resource-metadata) is not implemented yet
 
 # How to use it
 
@@ -93,8 +94,6 @@ Assuming that you want to hack on the [`concourse-time-resource`](https://github
 
 # Architecture
 
-![](doc/architecture-check.drawio.svg)
-
 There are two new components:
 
 1. The `resource proxy` stands in for the resource under development, proxying all of Concourse's `{check, in, out}` requests to the
@@ -131,17 +130,23 @@ As the `resource proxy` is a regular Concourse resource type, it needs to be con
 
 Reads `STDIN` and forwards it to `((source.url))/check` (e.g. `https://example.com/check`). The response is written to `STDOUT` and `STDERR`.
 
+![](doc/architecture-check.drawio.svg)
+
 ## `in`
 
 Reads `STDIN` and posts it to `((source.url))/check` (e.g. `https://example.com/check`). The response is written to `STDOUT` and `STDERR`.
 
 Files created by the resource under development are copied into the output directory `$1`.
 
+![](doc/architecture-in.drawio.svg)
+
 ## `out`
 
 Reads `STDIN` and posts it to `((source.url))/out` (e.g. `https://example.com/out`). The response is written to `STDOUT` and `STDERR`.
 
 Files provided to the proxy at `$1` are copied and made available to the resource under development likewise.
+
+![](doc/architecture-out.drawio.svg)
 
 # `server`
 
@@ -156,6 +161,7 @@ Invokes `in` of the resource under development and passes the incoming stream of
 ## `/out`
 
 Files received from the server are copied into a temporary directory. Then, `out` of the resource under development is invoked and the incoming stream of bytes as `STDIN` is passed.
+
 # Release
 
 There is a Concourse pipeline in `ci`. It creates a draft GitHub release for every tag:
@@ -178,7 +184,7 @@ $ fly \
 
 # Development
 
-* `scripts/test-*` manually invoke a local copy of Concourse' time resource via proxy
+* `scripts/test-*` manually invokes a local copy of Concourse' time resource via proxy
 * `scripts/iterate` restarts the server when go files were changed
 
 # License
